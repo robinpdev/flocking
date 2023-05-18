@@ -70,6 +70,27 @@ windowTitle = "flocking"
 windowPosition :: (Int, Int)
 windowPosition = (200, 200)
 
+sort :: (a -> a -> Bool) -> [a] -> [a]
+sort _ [] = []
+sort f (x:xs) =
+    let smaller = sort f (filter (f x) xs)
+        bigger  = sort f (filter (not . f x) xs)
+    in smaller ++ [x] ++ bigger
+
+
+--var dx = Math.max(rect.min.x - p.x, 0, p.x - rect.max.x);
+--var dy = Math.max(rect.min.y - p.y, 0, p.y - rect.max.y);
+--return Math.sqrt(dx*dx + dy*dy);
+pointToRect :: Vec -> Float -> Float -> Vec
+pointToRect p w h = head $ sort (\a b -> norm a < norm b) [vl, vr, vd, vu]
+    where 
+        px = getx p
+        py = gety p
+        vl = p - V2 0 py
+        vr = V2 w py - p
+        vd = p - V2 px 0
+        vu = V2 px h - p
+
 main :: IO ()
 main = playSim
 
@@ -104,7 +125,10 @@ tick s w@World{flock = f@Flock{birds = birdlist}} = return w{flock = f{birds = [
 
 
 updateBird :: Bird -> Bird
-updateBird b = b{pos = pos b + spd b}
+updateBird b@Bird{pos = p, spd = s} = b{pos = pos b + spd b}
+    --where
+        --nspd = s + steerto
+        --steerto = rotate 90 $ pointToRect p windowW windowH
 
 --start het Gloss-venster op met ingegeven assets en bestandsnamen
 playSim :: IO()
