@@ -1,6 +1,8 @@
+{-# LANGUAGE ViewPatterns #-}
 
 import System.IO  
 import Control.Monad
+
 
 import Graphics.Gloss
     ( green,
@@ -21,8 +23,17 @@ import Graphics.Gloss.Interface.IO.Game
       SpecialKey(KeyEnter, KeyLeft, KeyRight, KeyUp, KeyDown),
       Event(EventKey), playIO)
 
+import qualified Diagrams.TwoD as V
 import Linear
-import Control.Lens
+    (
+        norm,
+        normalize
+    )
+
+import Diagrams
+    (
+        unr2
+    )
 
 data Bird = Bird{
     pos :: Vec,
@@ -37,10 +48,12 @@ newtype Flock = Flock{
     birds :: [Bird]
 }
 
-type Vec = V2 Float
 
-getx = view _x
-gety = view _y
+type Vec = V.V2 Float
+
+getx :: Vec -> Float
+getx (unr2 -> (x, _)) = x
+gety (unr2 -> (_, y)) = y
 
 
 {-
@@ -82,14 +95,14 @@ sort f (x:xs) =
 --var dy = Math.max(rect.min.y - p.y, 0, p.y - rect.max.y);
 --return Math.sqrt(dx*dx + dy*dy);
 pointToRect :: Vec -> Float -> Float -> Vec
-pointToRect p w h = head $ sort (\a b -> norm a < norm b) [vl, vr, vd, vu]
+pointToRect p w h = head $ sort (\a b -> norm a > norm b) [vl, vr, vd, vu]
     where 
         px = getx p
         py = gety p
-        vl = p - V2 0 py
-        vr = V2 w py - p
-        vd = p - V2 px 0
-        vu = V2 px h - p
+        vl = p - V.V2 0 py
+        vr = V.V2 w py - p
+        vd = p - V.V2 px 0
+        vu = V.V2 px h - p
 
 main :: IO ()
 main = playSim
@@ -102,8 +115,8 @@ startWorld :: World
 startWorld = World{
     flock = Flock{
         birds = [let ifl = fromIntegral i :: Float in Bird{
-                pos = V2 (ifl * windowWf / 10.0) (ifl * windowHf / 10.0),
-                spd = V2 (cos (ifl / 10.0 * 3.14)) (sin (ifl / 10.0 * 3.14))
+                pos = V.V2 (ifl * windowWf / 10.0) (ifl * windowHf / 10.0),
+                spd = V.V2 (cos (ifl / 10.0 * 3.14)) (sin (ifl / 10.0 * 3.14))
             }
              | i <- [0..9]]
     }
@@ -115,7 +128,12 @@ render w = return $ translate (-windowWf / 2) (-windowHf / 2) $ pictures [
     ]
 
 renderBird :: Bird -> Picture
-renderBird b@Bird{pos = p} = color white $ translate (getx p) (gety p) $ rectangleSolid 10 10
+renderBird b@Bird{pos = p} = pictures [
+        color white $ translate (getx p) (gety p) $ rectangleSolid 10 10,
+        color green $ translate (getx towall) (gety towall) $ rectangleSolid 10 10
+    ]
+    where
+        towall = pointToRect p windowWf windowHf
 
 handleInputIO :: Event -> World -> IO World
 handleInputIO e w = return w
@@ -125,10 +143,10 @@ tick s w@World{flock = f@Flock{birds = birdlist}} = return w{flock = f{birds = [
 
 
 updateBird :: Bird -> Bird
-updateBird b@Bird{pos = p, spd = s} = b{pos = pos b + spd b}
-    --where
-        --nspd = s + steerto
-        --steerto = rotate 90 $ pointToRect p windowW windowH
+updateBird b@Bird{pos = p, spd = s} = b{pos = pos b + spd b, spd = nspd}
+    where
+        nspd = normalize (s + (steerto * 0.05))
+        steerto = normalize $ V.rotateBy (3.14 / 3) $ pointToRect p windowWf windowHf
 
 --start het Gloss-venster op met ingegeven assets en bestandsnamen
 playSim :: IO()
