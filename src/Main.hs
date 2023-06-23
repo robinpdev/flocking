@@ -40,6 +40,7 @@ import Diagrams
 import GHC.Float
 
 data Bird = Bird{
+    bid :: Int,
     pos :: Vec,
     spd :: Vec
 }
@@ -122,22 +123,28 @@ startWorld :: World
 startWorld = World{
     flock = Flock{
         birds = [let ifl = fromIntegral i :: Float in Bird{
-                pos = V.V2 (ifl * windowWf / 10.0) (ifl * windowHf / 10.0),
-                spd = V.V2 (cos (ifl / 10.0 * 3.14)) (sin (ifl / 10.0 * 3.14))
+                bid = i,
+                pos = V.V2 (ifl * windowWf / nbirdsf) (ifl * windowHf / nbirdsf),
+                spd = V.V2 (cos (ifl / nbirdsf * 3.14)) (sin (ifl / nbirdsf * 3.14))
             }
-             | i <- [0..9]]
+             | i <- [1..nbirds-1]]
     }
 }
+    where
+        nbirds = 60
+        nbirdsf = fromIntegral nbirds
 
 render :: World -> IO Picture
 render w = return $ translate (-windowWf / 2) (-windowHf / 2) $ pictures [
-        renderBird b | b <- birds $ flock w
+        renderBird b allbirds | b <- allbirds
     ]
+    where
+        allbirds =  birds $ flock w
 
-renderBird :: Bird -> Picture
-renderBird b@Bird{pos = p, spd = s} = pictures [
+renderBird :: Bird -> [Bird] -> Picture
+renderBird b@Bird{pos = p, spd = s} allbirds = pictures [
         color white $ translate (getx p) (gety p) $ rectangleSolid 10 10,
-        color green $ line [ vectup p, vectup towall],
+        color green $ line [ vectup (pos b), vectup $ pos (closestbirdto b allbirds)],
         color red $ line [ vectup p, vectup (p + 16 * s)]
     ]
     where
@@ -147,16 +154,22 @@ handleInputIO :: Event -> World -> IO World
 handleInputIO e w = return w
 
 tick :: Float -> World -> IO World
-tick s w@World{flock = f@Flock{birds = birdlist}} = return w{flock = f{birds = [updateBird b | b <- birdlist]}}
+tick s w@World{flock = f@Flock{birds = birdlist}} = return w{flock = f{birds = [updateBird b birdlist | b <- birdlist]}}
 
-
-updateBird :: Bird -> Bird
-updateBird b@Bird{pos = p, spd = s} = b{pos = pos b + spd b, spd = nspd}
+closestbirdto :: Bird -> [Bird] -> Bird
+closestbirdto b birds = head $ sort (\a b -> dist a > dist b) $ filter (\x -> bid x /= bid b) birds
     where
+        dist o = norm $ pos o - pos b
 
-        nspd = normalize (s + (steerto * strength * strength))
-        strength = realToFrac $ (1 / 6) * (1 / norm steerto)
-        steerto = normalize $ V.rotateBy (3.14 / 2) $ pointToRect p windowWf windowHf
+
+updateBird :: Bird -> [Bird] -> Bird
+updateBird b@Bird{pos = p, spd = s} allbirds = b{pos = pos b + spd b, spd = nspd}
+    where
+        nspd = normalize ((normalize toclosestbird * cstrength) + s + strength * normalize steerto)
+        strength = realToFrac $ 4 * (1 / max 0.01 (norm steerto))
+        cstrength = realToFrac $ 2 * (1 / norm toclosestbird)
+        steerto = V.rotateBy (3.14 / 2) $ pointToRect p windowWf windowHf
+        toclosestbird = V.rotateBy(3.14 / 2.5) (pos b - pos (closestbirdto b allbirds))
 
 --start het Gloss-venster op met ingegeven assets en bestandsnamen
 playSim :: IO()
